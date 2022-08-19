@@ -21,13 +21,27 @@ func main() {
 	}
 
 	apiKey := os.Getenv("YOUTUBE_API_KEY")
-	videoList := getVideoList(apiKey, "UC7WpJ8eZESNDtO2uALSjigQ", 2)
-	fmt.Printf("%v\n", videoList)
-	fmt.Println(videoList["kind"])
+	searchData := getsearchData(apiKey, "UC7WpJ8eZESNDtO2uALSjigQ", 2)
+	videoList := getVideoList(searchData)
+	for _, item := range videoList {
+		fmt.Println(item)
+	}
+	// fmt.Println(searchData)
+	// fmt.Println()
+	// fmt.Println(searchData["items"])
 
 }
 
-func getVideoList(apiKey string, channelId string, resultCount int) (videoList map[string]interface{}) {
+func getVideoList(searchData map[string]interface{}) (videoList []string) {
+	for _, item := range searchData["items"].([]interface{}) {
+		if video, ok := item.(map[string]interface{})["id"].(map[string]interface{})["videoId"].(string); ok {
+			videoList = append(videoList, video)
+		}
+	}
+	return
+}
+
+func getsearchData(apiKey string, channelId string, resultCount int) (searchData map[string]interface{}) {
 
 	q := url.Values{
 		"key":        []string{apiKey},
@@ -56,7 +70,7 @@ func getVideoList(apiKey string, channelId string, resultCount int) (videoList m
 		return
 	}
 	body, _ := io.ReadAll(resp.Body)
-	// body, _ := ioutil.ReadFile("search.json")  //test用
-	json.Unmarshal(body, &videoList)
+	// body, _ := ioutil.ReadFile("search.json") //test用
+	json.Unmarshal(body, &searchData)
 	return
 }
