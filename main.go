@@ -24,12 +24,10 @@ func main() {
 	searchData := getSearchData(apiKey, "UC7WpJ8eZESNDtO2uALSjigQ", 10)
 	videoList := extractVideoList(searchData)
 
-	var videoDetails []map[string]interface{}
+	videoDetails := getVideoDetail(apiKey, videoList)
 
-	for _, item := range videoList {
-		videoDetails = append(videoDetails, getVideoDetail(apiKey, item))
-	}
 	scheduledStreams, liveStream, endedStreams, videos := separateVideos(videoDetails)
+
 	fmt.Println("配信予定", scheduledStreams)
 	fmt.Println("配信中", liveStream)
 	fmt.Println("配信終了", endedStreams)
@@ -37,51 +35,72 @@ func main() {
 
 }
 
-func separateVideos(videoDetails []map[string]interface{}) (scheduledStreams []string, liveStream []string, endedStreams []string, videos []string) {
-
+func separateVideos(videoDetails []interface{}) (scheduledStreams []string, liveStream []string, endedStreams []string, videos []string) {
 	for _, item := range videoDetails {
-		if videoInfo, ok := item["items"].([]interface{})[0].(map[string]interface{}); ok {
+		if _, ok := item.(map[string]interface{})["liveStreamingDetails"]; ok {
 
-			if _, ok := videoInfo["liveStreamingDetails"]; ok {
-
-				if _, ok := videoInfo["liveStreamingDetails"].(map[string]interface{})["actualEndTime"]; ok {
-					if id, ok := videoInfo["id"]; ok {
-						endedStreams = append(endedStreams, id.(string))
-						// fmt.Println("endedStreams: ", id)
-						continue
-					}
-				}
-				if _, ok := videoInfo["liveStreamingDetails"].(map[string]interface{})["actualStartTime"]; ok {
-					if id, ok := videoInfo["id"]; ok {
-						liveStream = append(liveStream, id.(string))
-						// fmt.Println("liveStreams: ", id)
-						continue
-					}
-				}
-				if _, ok := videoInfo["liveStreamingDetails"].(map[string]interface{})["scheduledStartTime"]; ok {
-					if id, ok := videoInfo["id"]; ok {
-						scheduledStreams = append(scheduledStreams, id.(string))
-						// fmt.Println("scheduledStreams: ", id)
-						continue
-					}
-				}
-			} else {
-				if id, ok := videoInfo["id"]; ok {
-					videos = append(videos, id.(string))
-					// fmt.Println("videos: ", id)
+			if _, ok := item.(map[string]interface{})["liveStreamingDetails"].(map[string]interface{})["actualEndTime"]; ok {
+				if id, ok := item.(map[string]interface{})["id"]; ok {
+					endedStreams = append(endedStreams, id.(string))
+					// fmt.Println("endedStreams: ", id)
 					continue
 				}
 			}
+			if _, ok := item.(map[string]interface{})["liveStreamingDetails"].(map[string]interface{})["actualStartTime"]; ok {
+				if id, ok := item.(map[string]interface{})["id"]; ok {
+					liveStream = append(liveStream, id.(string))
+					// fmt.Println("liveStreams: ", id)
+					continue
+				}
+			}
+			if _, ok := item.(map[string]interface{})["liveStreamingDetails"].(map[string]interface{})["scheduledStartTime"]; ok {
+				if id, ok := item.(map[string]interface{})["id"]; ok {
+					scheduledStreams = append(scheduledStreams, id.(string))
+					// fmt.Println("scheduledStreams: ", id)
+					continue
+				}
+			}
+		} else {
+			if id, ok := item.(map[string]interface{})["id"]; ok {
+				videos = append(videos, id.(string))
+				// fmt.Println("videos: ", id)
+				continue
+			}
 		}
-
 	}
+
 	return
 
 }
 
-// https://zenn.dev/meihei/articles/1021b1a3f8c226#quota-%E3%81%AE%E7%AF%80%E7%B4%84%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%EF%BC%88%E3%81%BE%E3%81%A8%E3%82%81%E3%81%A6api%E3%82%92%E5%8F%A9%E3%81%8F%E6%96%B9%E6%B3%95%EF%BC%89
-// 引数をvideoIDsにしたものにする
-func getVideoDetail(apiKey string, videoId string) (searchData map[string]interface{}) {
+
+func getVideoDetail(apiKey string, videoList []string) (searchData []interface{}) {
+
+	var videoId string
+
+	for i, v := range videoList {
+		if (i+1)%50 == 0 {
+			videoId += v
+			for _, x := range requestVideoDetail(apiKey, videoId) {
+				searchData = append(searchData, x)
+			}
+			videoId = ""
+		} else {
+			videoId += v + ","
+		}
+	}
+
+	if len(videoId) != 0 {
+		for _, x := range requestVideoDetail(apiKey, videoId) {
+			searchData = append(searchData, x)
+		}
+	}
+
+	return
+}
+
+func requestVideoDetail(apiKey string, videoId string) (pieceOfData []interface{}) {
+	fmt.Println(videoId)
 
 	q := url.Values{
 		"key":  []string{apiKey},
@@ -107,8 +126,14 @@ func getVideoDetail(apiKey string, videoId string) (searchData map[string]interf
 		return
 	}
 	body, _ := io.ReadAll(resp.Body)
-	// body, _ := ioutil.ReadFile("search.json") //test用
-	json.Unmarshal(body, &searchData)
+	var data map[string]interface{}
+	json.Unmarshal(body, &data)
+	if _, ok := data["items"].([]interface{}); ok {
+		pieceOfData = data["items"].([]interface{})
+	} else {
+		log.Fatal("Error: not included data")
+		return
+	}
 	return
 }
 
@@ -149,7 +174,6 @@ func getSearchData(apiKey string, channelId string, resultCount int) (searchData
 		return
 	}
 	body, _ := io.ReadAll(resp.Body)
-	// body, _ := ioutil.ReadFile("search.json") //test用
 	json.Unmarshal(body, &searchData)
 	return
 }
